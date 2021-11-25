@@ -3,6 +3,7 @@ import sys
 import time
 import math
 import threading
+import datetime
 #import busio
 #import digitalio
 #import board
@@ -16,6 +17,8 @@ import threading
     #Test this locally before trying to deploy via balena using test messages instead of ADC values
     #Use localmode when deploying to balena and use the advertised local address (using public IPs is possible but more complicated to configure due to the security measures BalenaOS imposes by default.  These are a good thing for real world deployment but over complicate the prac for the immediate purposes
 
+PROGRESS = False
+THREAD_STATE = None
 SERVER = "127.0.1.1"
 PORT = 5000
 HEADER = 64
@@ -26,6 +29,8 @@ DISCONNECT_MESSAGE = "DISCONNECTED!"
 f = open("../../multicontainer-server/data/adclog.txt", "w+")
 
 file = open('../../multicontainer-server/data/sensorlog.txt', "w+")
+
+state = open('../../multicontainer-server/data/status.txt', 'w+')
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 client.connect(ADDRESS)
@@ -97,6 +102,30 @@ def convert_to_temperature(analogIn):
     millivolts = analogIn.value * (analogIn.voltage * 1000/65535)
     return (millivolts - 500) / 10
 
+def send_adc_values():
+    start = time.time()
+    thread = threading.Timer(10.0, send_adc_values)
+    thread.daemon = True    # Daemon threads exit when the program does
+    thread.start()
+
+    end = time.time()
+    temp, ldr = createAnalogInput()
+
+    _time_ = datetime.datetime.fromtimestamp(start).strftime('%Y-%m-%d %H:%M:%S')
+
+    send(_time_) # Data and time of each iteration
+    send("LDR") # Command to tell the server that next data is from LDR
+    send(ldr)
+    send("TEMP")  # Command to tell the server that next data is from TEMP
+    send(temp)    # Sends raw temperature values
+    send(convert_to_temperature(temp))  # Sends temp values in degree celcius unit
+    THREAD_STATE = thread.is_alive  # updates thread status
+
+    while PROGRESS:
+        thread.wait()  # PROGRESS IS TRUE IT WILL PAUSE THE THREAD FROM SAMPLING
+
+
+
 # Makes use of a thread that prints results every 10 seconds
 def print_results():
     
@@ -128,6 +157,7 @@ def test_send():
     for i in range(len(dul)):
         send(dul[i])
 
+# Hanldles incoming messages from the web server
 def handle_server():
     print("Connected")
     connect = True
@@ -142,24 +172,21 @@ def handle_server():
             
             print("Result  ", data )
             if date_len == "STATUS":
-                '''
-                IS THREAD ALIVE
-                '''
+                state.write(THREAD_STATE)
             elif date_len == "SENDOFF":
-                '''
-                    STOP SAMPLING
-                '''
+                PROGRESS = True
             else:
                 test_send()
         else:
             connect = False
     client.close()
 
-
+# Starts the handle_server function
 def start():
     receive_thread = threading.Thread(target=handle_server)
     receive_thread.start()
 
+# Same as above, but was just testing
 def test_start():
     recv_th = threading.Thread(target=test_send)
     recv_th.start()
@@ -183,8 +210,8 @@ while(True):
     #TODO add code to read the ADC values and print them, write them, and send them
     
 
-   test_start()
-   #start()
+   #test_start()
+   start()
    # print_results()
    #test_send()
    time.sleep(5)
