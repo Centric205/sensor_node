@@ -1,5 +1,4 @@
 # sensor_node
-PART 2 OF PRACTICAL 6
 
 The Sensor Node Docker Container is for Pi-01.
   - The raspberry pi here is connected to a circuit on the breadboard via the GPIO pins
